@@ -407,5 +407,40 @@ window.addEventListener('DOMContentLoaded', ()=>{
   document.addEventListener('click', (e)=>{ const t=e.target; if(!t) return; const tag=(t.tagName||'').toUpperCase(); if(tag==='BUTTON'||tag==='SELECT'||(tag==='INPUT' && /checkbox|radio|button/.test(t.type))||t.getAttribute('role')==='button'){ after(300); } }, true);
 })();
 </script>
+
+<script>
+(function(){
+  const toHide = new Set(["AUSRUBRIK01","CARRUBRIK01"]);
+  function removeSelectOptions(){
+    document.querySelectorAll('select').forEach(sel=>{
+      Array.from(sel.options||[]).forEach(opt=>{
+        const t = (opt.textContent||'').trim();
+        const v = (opt.value||'').trim();
+        if (toHide.has(t) || toHide.has(v)) {
+          opt.remove();
+        }
+      });
+    });
+  }
+  function removeListItems(){
+    const lists = document.querySelectorAll('ul,ol,.dropdown-menu,.menu,.list,.options,.select-options');
+    lists.forEach(list=>{
+      Array.from(list.querySelectorAll('li,div,span,a')).forEach(item=>{
+        const t = (item.textContent||'').trim();
+        if (toHide.has(t)) {
+          item.remove();
+        }
+      });
+    });
+  }
+  const apply = ()=>{removeSelectOptions(); removeListItems();};
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', apply);
+  } else { apply(); }
+  const obs = new MutationObserver(apply);
+  obs.observe(document.documentElement, {childList:true, subtree:true});
+})();
+</script>
+
 </body>
 </html>
