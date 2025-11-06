@@ -1,0 +1,411 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Storage & Backup Health Check Portal</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<style>
+.badge-dot{display:inline-flex;align-items:center;gap:.35rem}
+.badge-dot .dot{display:inline-block;width:.6rem;height:.6rem;border-radius:50%}
+.badge-dot.ok .dot{background:#16a34a}.badge-dot.warn .dot{background:#f59e0b}.badge-dot.crit .dot{background:#dc2626}
+.card h6{font-weight:600}
+.small-muted{color:#6b7280}
+#donutGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.donutBox{border:1px solid #e5e7eb;border-radius:.5rem;padding:.5rem}
+</style>
+</head>
+<body class="bg-light">
+<div class="container py-3">
+  <h4 class="mb-3">Storage & Backup Health Check Portal</h4>
+
+  <div class="card p-3 mb-3">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <input id="fileXlsx" type="file" accept=".xlsx,.xlsm" style="display:none">
+      <label class="btn btn-primary btn-sm mb-0" for="fileXlsx">Upload XLSX/XLSM</label>
+      <button class="btn btn-outline-secondary btn-sm" id="btnReset">Reset filters</button>
+      <button class="btn btn-outline-secondary btn-sm" id="btnExportDonuts">Export All Donuts (PNG)</button>
+      <span class="ms-auto"><strong>Status:</strong> <span id="fileStatus">No file loaded</span></span>
+    </div>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <h6 class="mb-2">Filters</h6>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Filter by location</label>
+        <select id="locationSelect" class="form-select" multiple size="6"></select>
+        <div class="mt-2 d-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" id="btnLocAll">Select all</button>
+          <button class="btn btn-sm btn-outline-secondary" id="btnLocClear">Clear</button>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Types</label>
+        <div id="typeChecks" class="d-flex flex-wrap gap-2"></div>
+        <div class="mt-2 d-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" id="btnTypesAll">Types: All</button>
+          <button class="btn btn-sm btn-outline-secondary" id="btnTypesNone">Types: None</button>
+        </div>
+        <div class="mt-2">
+          <label class="form-label">Device search</label>
+          <input id="searchText" class="form-control" placeholder="Search by device name"/>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <h6 class="mb-2">Status Legend &amp; Guidance</h6>
+    <div class="d-flex gap-3 align-items-center mb-1">
+      <span class="badge-dot ok"><span class="dot"></span><span>OK</span></span>
+      <span>Utilization &lt; 80%</span>
+    </div>
+    <div class="d-flex gap-3 align-items-center mb-1">
+      <span class="badge-dot warn"><span class="dot"></span><span>Warning</span></span>
+      <span>Utilization 80%–84.9%</span>
+    </div>
+    <div class="d-flex gap-3 align-items-center mb-2">
+      <span class="badge-dot crit"><span class="dot"></span><span>Critical</span></span>
+      <span>Utilization ≥ 85%</span>
+    </div>
+    <div class="small-muted">Thresholds apply to all devices. ExaGrid uses provided Util% when present; otherwise Util%=Used/Total×100.</div>
+    <hr/>
+    <div class="row text-center">
+      <div class="col-6"><div><strong>Overall Util:</strong> <span id="overallUtil">—</span></div></div>
+      <div class="col-6"><div><strong>Free:</strong> <span id="freeTb">—</span> TB</div></div>
+    </div>
+    <div class="mt-2"><strong>Last updated:</strong> <span id="lastUpdated">—</span></div>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <h6 class="mb-2">Utilization by Storage Type</h6>
+    <div id="donutGrid">
+      <div class="donutBox"><div class="small-muted mb-1">Hitachi</div><div id="pieHitachi"></div></div>
+      <div class="donutBox"><div class="small-muted mb-1">IBM</div><div id="pieIBM"></div></div>
+      <div class="donutBox"><div class="small-muted mb-1">Isilon</div><div id="pieIsilon"></div></div>
+      <div class="donutBox"><div class="small-muted mb-1">ExaGrid</div><div id="pieExaGrid"></div></div>
+      <div class="donutBox"><div class="small-muted mb-1">Nasuni</div><div id="pieNasuni"></div></div>
+      <div class="donutBox"><div class="small-muted mb-1">Rubrik</div><div id="pieRubrik"></div></div>
+      <div class="donutBox"><div class="small-muted mb-1">DataDomain</div><div id="pieDataDomain"></div></div>
+      <div class="donutBox"><div class="small-muted mb-1">NetApp</div><div id="pieNetApp"></div></div>
+      <div class="donutBox"><div class="small-muted mb-1">SAN Switch</div><div id="pieSANSwitch"></div></div>
+    </div>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <h6 class="mb-2">All Storages &amp; Devices — Capacity, Utilization &amp; Health</h6>
+    <table class="table table-sm" id="devTable">
+      <thead><tr>
+        <th>Type</th><th>Location</th><th>Device Name</th>
+        <th class='text-end'>Total (TB)</th><th class='text-end'>Used (TB)</th><th class='text-end'>Util (%)</th><th>Status</th><th>Health Check</th>
+      </tr></thead>
+      <tbody></tbody>
+      <tfoot><tr><td colspan="3">Totals (visible rows):</td><td id="totTotal" class='text-end'>0.00</td><td id="totUsed" class='text-end'>0.00</td><td colspan="3"></td></tr></tfoot>
+    </table>
+    <div id="noRows" class="text-muted">No devices match the current filters. Use <strong>Reset filters</strong> or broaden selections.</div>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <h6 class="mb-2">Diagnostics &amp; Raw Parse</h6>
+    <div id="uploadLog" class="small text-muted mb-2">No file loaded yet.</div>
+    <pre id="diagBody" class="small" style="max-height:300px; overflow:auto"></pre>
+  </div>
+
+  <div class="card p-3 mb-3">
+    <h6 class="mb-2">CSV Fallback Uploader (no internet/CDNs required)</h6>
+    <div class="small text-muted">Export sheets to CSV: <code class="small">IBM.csv</code>, <code class="small">Isilon.csv</code>, <code class="small">Hitachi.csv</code>, <code class="small">Backup Capacity.csv</code> (optional <code class="small">Summary.csv</code> and <code class="small">Switches.csv</code>).</div>
+    <input id="csvFiles" type="file" multiple accept=".csv" class="form-control mt-2"/>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.29.1.min.js"></script>
+<script>
+// ===== Helpers =====
+const H=s=>String(s||'').toLowerCase();
+const S=s=>String(s||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+const H_ = s => String(s||'').trim().toLowerCase();
+const canonicalType=(info={})=>{ const vendor=H(info.vendor||''); const t=H(info.type||''); const name=H(info.name||'');
+  if(/rubrik/i.test(name)) return 'Rubrik';
+  if(t.includes('isilon')||vendor.includes('isilon')) return 'Isilon';
+  if(t.includes('exagrid')||vendor.includes('exagrid')||name.includes('exagrid')) return 'ExaGrid';
+  if(t.includes('nasuni')||vendor.includes('nasuni')||name.includes('nasuni')) return 'Nasuni';
+  if(t.includes('data domain')||vendor.includes('data domain')||t==='dd'||/\bdd\d{3,4}\b/.test(name)||name.includes('ddp')) return 'DataDomain';
+  if(t.includes('ibm')||vendor.includes('ibm')||/fs\s*9200|fs900/i.test(name)) return 'IBM';
+  if(t.includes('hitachi')||vendor.includes('hitachi')||name.includes('g900')) return 'Hitachi';
+  if(t.includes('switch')||name.includes('san')) return 'SAN Switch';
+  if(t.includes('netapp')||vendor.includes('netapp')) return 'NetApp';
+  if(t.includes('backup')) return 'Backup';
+  return (info.type||info.vendor||'Other'); };
+
+let CURRENT={ devices:[] };
+const computeUtil = d => { if (typeof d.util==='number' && !isNaN(d.util)) return d.util; const t=Number(d.total)||0, u=Number(d.used)||0; if(t<=0) return NaN; return (u/t)*100; };
+const badgeClass = util => util>=85? 'crit' : (util>=80? 'warn' : 'ok');
+const badgeLabel = util => util>=85? 'Critical' : (util>=80? 'Warning' : 'OK');
+function pct(u,t){ t=Number(t)||0; u=Number(u)||0; return t>0? (u/t*100) : 0; }
+function num(x){ const n=Number(x); return isNaN(n)? null : n; }
+
+function findHeaderRow(rows, spec){
+  if(!rows) return null; for(let i=0;i<rows.length;i++){
+    const r=rows[i]||[]; const map={}; let ok=true;
+    for(const key in spec){ const candidates=spec[key]; let found=null;
+      for(let j=0;j<r.length;j++){ const v=String(r[j]||'').toLowerCase(); if(candidates.some(c=> v.includes(c))){ found=j; break; } }
+      if(found==null){ ok=false; break; } map[key]=found; }
+    if(ok) return { rowIndex:i, map };
+  }
+  return null;
+}
+
+// ===== Parsers =====
+function parseIsilon(rows, into, diag){
+  if(!rows) return diag.push('Isilon: sheet/file not found');
+  const hdr=findHeaderRow(rows,{ name:['node name'], loc:['location'], total:['total usable capacity','size in tb'], used:['used capacity'] });
+  let cnt=0; if(hdr){ const s=hdr.rowIndex+1; for(const r of rows.slice(s)){ if(!r||!r.some(x=>x!=null)) break; const name=String(r[hdr.map.name]||'').trim(); if(!name) continue; const loc=String(r[hdr.map.loc]||'Unspecified').trim(); const total=Number(r[hdr.map.total]); const used=Number(r[hdr.map.used]); into.push({type:'Isilon',location:loc,name,total,used,health:null}); cnt++; } }
+  diag.push(`Isilon: rows added=${cnt}`);
+}
+
+function parseIBM(rows, into, diag){
+  if(!rows) return diag.push('IBM: sheet/file not found');
+  const hdr=findHeaderRow(rows,{ name:['storage'], total:['total capacity (tb)'], used:['used capacity (tb)'] });
+  let cnt=0; if(hdr){ const s=hdr.rowIndex+1; for(const r of rows.slice(s)){ if(!r||!r.some(x=>x!=null)) break; const name=String(r[hdr.map.name]||'').trim(); const total=Number(r[hdr.map.total]); const used=Number(r[hdr.map.used]); if(!name||isNaN(total)) continue; const loc = /car/i.test(name)? 'Carrollton' : (/aus/i.test(name)? 'Austin':'Unspecified'); into.push({type:'IBM',location:loc,name,total,used,health:null}); cnt++; } }
+  diag.push(`IBM: rows added=${cnt}`);
+}
+
+function parseHitachi(rows, into, diag){
+  if(!rows) return diag.push('Hitachi: sheet/file not found');
+  let cnt=0; const hdrList=findHeaderRow(rows,{ dev:['storage devices'], loc:['location'], ip:['ip'], health:['health check status'] });
+  const byIp=new Map(); if(hdrList){ const s=hdrList.rowIndex+1; for(const r of rows.slice(s)){ if(!r||!r.some(x=>x!=null)) break; const name=String(r[hdrList.map.dev]||'').trim(); if(!name) continue; const loc=String(r[hdrList.map.loc]||'Unspecified').trim(); const ip=String(r[hdrList.map.ip]||'').trim(); const health=r[hdrList.map.health]; byIp.set(ip,{name,location:loc||'Unspecified',health}); } }
+  const isHdr = (row)=>{ const t=String((row||[])[0]||''); return /g900\s*\(/i.test(t) && /(\d+\.\d+\.\d+\.\d+)/.test(t); };
+  const getIp = (row)=>{ const m=String((row||[])[0]||'').match(/(\d+\.\d+\.\d+\.\d+)/); return m?m[1]:''; };
+  for(let i=0;i<rows.length;i++){
+    const row=rows[i]||[]; if(!isHdr(row)) continue; const ip=getIp(row); const sub=rows.slice(i+1,i+80);
+    const hdr=findHeaderRow(sub,{ pool:['pool capacity (tb)','pool capacity'], used:['total used space (tb)','total used space'] }); if(!hdr) continue; const start=i+1+hdr.rowIndex+1;
+    for(let k=start;k<rows.length;k++){
+      const rr=rows[k]||[]; if(!rr.some(x=> x!=null)) break; const label=String(rr[0]||'').toLowerCase(); if(label.includes('total capacity')){ const total = Number(rr[hdr.map.pool]); const used = Number(rr[hdr.map.used]); const base=byIp.get(ip)||{}; const name=base.name||String(row[0]).split('(')[0].trim(); const loc=base.location||(/\(aus\)/i.test(row[0])?'Austin':(/\(car\)/i.test(row[0])?'Carrollton':'Unspecified')); const health=base.health||null; into.push({type:'Hitachi',location:loc,name,total,used,health}); cnt++; break; }
+    }
+  }
+  if(cnt===0 && byIp.size){ for(const [,base] of byIp){ into.push({type:'Hitachi',location:base.location||'Unspecified',name:base.name||'',total:null,used:null,health:base.health||null}); cnt++; } }
+  diag.push(`Hitachi: rows added=${cnt}`);
+}
+
+function parseBackup(rows, into, diag){
+  if(!rows) return diag.push('Backup: sheet/file not found');
+  let cnt=0;
+  // DataDomain (GB)
+  const hdrDD=findHeaderRow(rows,{ loc:['location'], name:['device name'], vendor:['vendor'], model:['dd model','model'], totalGB:['total(gb)'], usedGB:['used(gb)'], util:['utilization(%)'] });
+  if(hdrDD){ const s=hdrDD.rowIndex+1; for(const r of rows.slice(s)){ if(!r||!r.some(x=>x!=null)) break; const name=String(r[hdrDD.map.name]||'').trim(); if(!name) continue; const loc=String(r[hdrDD.map.loc]||'Unspecified').trim(); const vendor=String(r[hdrDD.map.vendor]||'').trim(); const total=(Number(r[hdrDD.map.totalGB])||0)/1024; const used=(Number(r[hdrDD.map.usedGB])||0)/1024; const util=Number(r[hdrDD.map.util]); const type=canonicalType({vendor,type:'Backup',name}); into.push({type,location:loc,name,total,used,util,health:null}); cnt++; } }
+  // ExaGrid (TB)
+  const hdrEX=findHeaderRow(rows,{ loc:['location'], name:['device name'], vendor:['vendor'], model:['model'], totalTB:['total(tb)'], usedTB:['used(tb)'] });
+  if(hdrEX){ const s=hdrEX.rowIndex+1; for(const r of rows.slice(s)){ if(!r||!r.some(x=>x!=null)) break; const vendor=String(r[hdrEX.map.vendor]||'').trim(); const name=String(r[hdrEX.map.name]||'').trim(); if(!name) continue; const loc=String(r[hdrEX.map.loc]||'Unspecified').trim(); const total=num(r[hdrEX.map.totalTB])||0; const used=num(r[hdrEX.map.usedTB])||0; const type=canonicalType({vendor,type:'Backup',name}); into.push({type,location:loc,name,total,used,health:null}); cnt++; } }
+  diag.push(`Backup: rows added=${cnt}`);
+}
+
+function parseSwitches(rows, into, diag){
+  if(!rows) return diag.push('Switches: sheet/file not found');
+  const hdr=findHeaderRow(rows,{ sw:['switch'], ip:['ip'], obs:['observation','ok'], rem:['remarks'] });
+  let cnt=0; if(hdr){ const s=hdr.rowIndex+1; for(const r of rows.slice(s)){ if(!r||!r.some(x=>x!=null)) break; const sw=String(r[hdr.map.sw]||'').trim(); if(!sw) continue; const ip=String(r[hdr.map.ip]||'').trim(); const obs=String(r[hdr.map.obs]||'').trim(); const rem=String(r[hdr.map.rem]||'').trim(); const name=sw; const health=[obs,rem].filter(Boolean).join('; '); const loc = /car/i.test(sw)? 'Carrollton' : (/aus/i.test(sw)? 'Austin':'Unspecified'); into.push({type:'SAN Switch',location:loc,name,total:null,used:null,health}); cnt++; } }
+  diag.push(`Switches: rows added=${cnt}`);
+}
+
+// ===== Filters / Rendering =====
+function initFilters(devs){
+  const locs=[...new Set(devs.map(d=> d.location||'Unspecified'))].sort();
+  const sel=document.getElementById('locationSelect'); sel.innerHTML = locs.map(l=> `<option value="${S(l)}">${S(l)}</option>`).join('');
+  const types=[...new Set(devs.map(d=> d.type||'Other'))].sort();
+  const tDiv=document.getElementById('typeChecks'); tDiv.innerHTML = types.map(t=> `<label class='form-check form-check-inline'><input class='form-check-input typeCheck' type='checkbox' value='${S(t)}'> <span class='form-check-label'>${S(t)}</span></label>`).join('');
+  document.querySelectorAll('.typeCheck').forEach(cb=> cb.checked=true);
+  document.querySelectorAll('.typeCheck').forEach(cb=> cb.addEventListener('change', applyFilters));
+  if(sel){ sel.addEventListener('change', applyFilters); }
+}
+
+function applyFilters(){
+  const sel=document.getElementById('locationSelect'); const locs = sel? Array.from(sel.selectedOptions).map(o=>o.value):[];
+  const useAll = locs.length===0; const allowed = new Set(Array.from(document.querySelectorAll('.typeCheck')).filter(cb=>cb.checked).map(cb=>cb.value));
+  const text = (document.getElementById('searchText').value||'').toLowerCase();
+  const rows=(CURRENT.devices||[]).filter(d=>{ const okLoc = useAll || locs.includes(d.location); const okType = allowed.size===0 ? false : allowed.has(String(d.type||'')); const okText = !text || (d.name && String(d.name).toLowerCase().includes(text)); return okLoc && okType && okText; });
+  renderTable(rows); renderDonuts(rows); renderKpis(rows);
+}
+
+function renderTable(rows){
+  const tb=document.querySelector('#devTable tbody'); tb.innerHTML=''; let tTot=0, tUsed=0;
+  rows.forEach(d=>{ const util=computeUtil(d); tTot+=Number(d.total)||0; tUsed+=Number(d.used)||0; const tr=document.createElement('tr'); tr.innerHTML=`<td>${S(d.type)}</td><td>${S(d.location)}</td><td>${S(d.name)}</td><td class='text-end'>${(d.total>0)?Number(d.total).toFixed(2):'—'}</td><td class='text-end'>${(d.used>0)?Number(d.used).toFixed(2):'—'}</td><td class='text-end'>${isNaN(util)?'—':util.toFixed(1)}</td><td><span class='badge-dot ${badgeClass(util)}'><span class='dot'></span><span>${badgeLabel(util)}</span></span></td><td>${(d.health!=null && d.health!=='')?S(String(d.health)).replace(/\n/g,'<br>'):'—'}</td>`; tb.appendChild(tr); });
+  document.getElementById('totTotal').textContent=tTot.toFixed(2);
+  document.getElementById('totUsed').textContent=tUsed.toFixed(2);
+  document.getElementById('noRows').style.display = rows.length? 'none':'block';
+}
+
+function renderKpis(rows){
+  const total=rows.reduce((a,d)=>a+((Number(d.total)||0)),0);
+  const used=rows.reduce((a,d)=>a+((Number(d.used)||0)),0);
+  const overallUtil = pct(used,total);
+  const ou=document.getElementById('overallUtil'); const ft=document.getElementById('freeTb'); const lu=document.getElementById('lastUpdated');
+  if(ou) ou.textContent = total>0? overallUtil.toFixed(1)+'%':'—';
+  if(ft) ft.textContent = total>0? Math.max(total-used,0).toFixed(2):'—';
+  if(lu) lu.textContent = rows.length? new Date().toLocaleString():'—';
+}
+
+function renderDonuts(rows){
+  const items=[
+    {type:'Hitachi', id:'pieHitachi'},
+    {type:'IBM', id:'pieIBM'},
+    {type:'Isilon', id:'pieIsilon'},
+    {type:'ExaGrid', id:'pieExaGrid'},
+    {type:'Nasuni', id:'pieNasuni'},
+    {type:'Rubrik', id:'pieRubrik'},
+    {type:'DataDomain', id:'pieDataDomain'},
+    {type:'NetApp', id:'pieNetApp'},
+    {type:'SAN Switch', id:'pieSANSwitch'}
+  ];
+  items.forEach(({type,id})=>{
+    const set=rows.filter(d=> d.type===type);
+    const tot=set.reduce((a,d)=>a+(Number(d.total)||0),0);
+    const use=set.reduce((a,d)=>a+(Number(d.used)||0),0);
+    const el=document.getElementById(id); if(!window.Plotly || !el) return;
+    if(tot>0){ const data=[{type:'pie',hole:.6,values:[use,Math.max(tot-use,0)],labels:['Used','Free'],marker:{colors:['#2563EB','#E5F1FB']},textinfo:'label+percent'}]; const layout={height:240,margin:{t:10,l:10,r:10,b:10}}; Plotly.newPlot(id,data,layout); }
+    else if(use>0 && (type==='Nasuni' || type==='Rubrik')){ const data=[{type:'pie',hole:.6,values:[use,0],labels:['Used','Free'],marker:{colors:['#2563EB','#E5F1FB']},textinfo:'label+percent'}]; const layout={height:240,margin:{t:10,l:10,r:10,b:10}}; Plotly.newPlot(id,data,layout); }
+    else { Plotly.newPlot(id, [], {height:160,annotations:[{text:`No ${type} in current filters`,showarrow:false}]}); }
+  });
+}
+
+async function exportAllDonuts(){
+  try{
+    const ids=['pieHitachi','pieIBM','pieIsilon','pieExaGrid','pieNasuni','pieRubrik','pieDataDomain','pieNetApp','pieSANSwitch'];
+    const urls=[];
+    for(const id of ids){ const el=document.getElementById(id); if(!el) { urls.push(null); continue; } const url=await Plotly.toImage(el,{format:'png',height:240,width:320}); urls.push(url); }
+    const canvas=document.createElement('canvas'); const W=960, H=720; canvas.width=W; canvas.height=H; const ctx=canvas.getContext('2d');
+    const positions=[[0,0],[320,0],[640,0],[0,240],[320,240],[640,240],[0,480],[320,480],[640,480]];
+    for(let i=0;i<urls.length;i++){
+      const u=urls[i]; if(!u) continue; await new Promise((res,rej)=>{ const img=new Image(); img.onload=()=>{ const [x,y]=positions[i]; ctx.drawImage(img,x,y,320,240); res(); }; img.onerror=rej; img.src=u; });
+    }
+    const out=canvas.toDataURL('image/png'); const a=document.createElement('a'); a.href=out; a.download='donuts_all_3x3.png'; a.click();
+  }catch(e){ alert('Export failed: '+(e.message||e)); }
+}
+
+// ===== XLSX Upload Handler =====
+async function handleXlsxFile(f){
+  const statusEl=document.getElementById('fileStatus'); const diagEl=document.getElementById('diagBody');
+  statusEl.textContent = `Parsing XLSX: ${f.name} …`;
+  if(!window.XLSX){ const msg='XLSX library not available — likely CDN blocked. Use CSV fallback or offline build.'; alert(msg); statusEl.textContent=msg; document.getElementById('uploadLog').textContent=msg; return; }
+  try{
+    const buf=await f.arrayBuffer(); const wb=XLSX.read(buf,{type:'array'});
+    const names=wb.SheetNames||[]; const diag=[]; diag.push('Sheets detected: '+names.join(', '));
+    const findSheet=(variants)=>{ const keys=Array.isArray(variants)?variants:[variants]; const exact=names.find(n=> keys.some(k=> H_(n)===H_(k))); if(exact) return wb.Sheets[exact]; const incl=names.find(n=> keys.some(k=> H_(n).includes(H_(k)))); return incl? wb.Sheets[incl] : null; };
+    const toRows=(variants)=>{ const sh=findSheet(variants); if(!sh){ diag.push('Sheet not found: '+JSON.stringify(variants)); return null; } return XLSX.utils.sheet_to_json(sh,{header:1,defval:null}); };
+
+    const devs=[]; const dedup=new Set(); const addUnique=(d)=>{ const key=(d.type||'')+'|'+(d.name||''); if(dedup.has(key)) return; dedup.add(key); devs.push(d); };
+
+    const rowsBackup = toRows(['Backup Capacity','Backup','DataDomain','DD','Nasuni','Rubrik']);
+    parseIBM(toRows(['IBM','FS 9200','IBM SAN']),devs,diag);
+    parseIsilon(toRows(['Isilon','EMC Isilon']),devs,diag);
+    parseHitachi(toRows(['Hitachi','G900','HDS','Hitachi G900']),devs,diag);
+    parseBackup(rowsBackup,devs,diag);
+
+    // Post-process: Nasuni (J1..J4 and K1..K4) unlimited capacity => used only
+    if(rowsBackup){
+      let nrCnt=0;
+      const tryAddNasuni=(locCell,valCell)=>{
+        const loc = (typeof locCell==='string' ? locCell.trim() : null);
+        const usedTBRaw = (typeof valCell==='number' ? valCell : Number(valCell));
+        const usedTB = (typeof usedTBRaw==='number' && !isNaN(usedTBRaw)) ? usedTBRaw : null;
+        if(loc && usedTB!=null){ addUnique({type:'Nasuni',location:loc,name:`Nasuni-${loc}`,total:null,used:usedTB,health:null}); nrCnt++; }
+      };
+      const N = Math.min(4, rowsBackup.length);
+      for(let i=0;i<N;i++){
+        const r=rowsBackup[i]||[];
+        tryAddNasuni(r[9], r[10]); // J (loc), K (TB)
+        tryAddNasuni(r[10], r[9]); // K (loc), J (TB) — if layout reversed
+      }
+      // scan remainder in case the block is lower
+      for(let i=4;i<rowsBackup.length;i++){
+        const r=rowsBackup[i]||[]; tryAddNasuni(r[9], r[10]); tryAddNasuni(r[10], r[9]);
+      }
+      // Rubrik: strictly AUSRUBRIK01 / CARRUBRIK01 in J..M, PB values -> TB
+      rowsBackup.forEach(r=>{
+        const slice=[r[9],r[10],r[11],r[12]]; const nameCell = slice.find(x=> typeof x==='string' && /^(AUSRUBRIK01|CARRUBRIK01)$/i.test(x.trim()));
+        if(nameCell){ const nums = slice.map(x=> (typeof x==='number'? x : Number(x))).filter(v=> typeof v==='number' && !isNaN(v)); let totalPB = nums[0] ?? null; let usedPB = (nums.length>1? nums[1] : totalPB); if(totalPB!=null){ const totalTB=totalPB*1024; const usedTB=(usedPB!=null? usedPB: totalPB)*1024; const loc = /AUS/i.test(nameCell) ? 'Austin' : (/CAR/i.test(nameCell) ? 'Carrollton' : 'Unspecified'); addUnique({type:'Rubrik',location:loc,name:String(nameCell).trim(),total:totalTB,used:usedTB,health:null}); nrCnt++; } }
+      });
+      diag.push('Backup (J..M) Nasuni/Rubrik rows added: '+nrCnt);
+    }
+
+    parseSwitches(toRows(['Switches','SAN Switches','Switch']),devs,diag);
+
+    diag.push('Total devices parsed: '+devs.length);
+    CURRENT.devices=devs; initFilters(devs);
+    document.getElementById('btnTypesAll').click();
+    applyFilters();
+    statusEl.textContent = `Loaded: ${f.name}`; if(diagEl) diagEl.textContent = diag.join('\n'); document.getElementById('uploadLog').textContent='Upload and parse complete';
+  }catch(err){ console.error(err); alert('Error parsing XLSX: '+(err.message||err)); document.getElementById('uploadLog').textContent='JS error: '+(err.message||err); statusEl.textContent='Error parsing XLSX'; }
+}
+
+// ===== Wiring =====
+window.addEventListener('DOMContentLoaded', ()=>{
+  const fileXlsx=document.getElementById('fileXlsx');
+  fileXlsx.addEventListener('change', (e)=>{ const f=e.target.files?.[0]; if(!f){ document.getElementById('uploadLog').textContent='No file selected'; return; } handleXlsxFile(f); });
+  document.getElementById('btnReset').addEventListener('click', ()=>{ const sel=document.getElementById('locationSelect'); if(sel) sel.selectedIndex=-1; document.querySelectorAll('.typeCheck').forEach(cb=> cb.checked=true); document.getElementById('searchText').value=''; applyFilters(); });
+  document.getElementById('btnLocAll').addEventListener('click', ()=>{ const sel=document.getElementById('locationSelect'); if(sel){ for(let i=0;i<sel.options.length;i++) sel.options[i].selected=true; } applyFilters(); });
+  document.getElementById('btnLocClear').addEventListener('click', ()=>{ const sel=document.getElementById('locationSelect'); if(sel){ for(let i=0;i<sel.options.length;i++) sel.options[i].selected=false; } applyFilters(); });
+  document.getElementById('btnTypesAll').addEventListener('click', ()=>{ document.querySelectorAll('.typeCheck').forEach(cb=> cb.checked=true); applyFilters(); });
+  document.getElementById('btnTypesNone').addEventListener('click', ()=>{ document.querySelectorAll('.typeCheck').forEach(cb=> cb.checked=false); applyFilters(); });
+  document.getElementById('searchText').addEventListener('input', applyFilters);
+  document.getElementById('btnExportDonuts').addEventListener('click', exportAllDonuts);
+  window.addEventListener('error', e=>{ try{ const el=document.getElementById('uploadLog'); if(el) el.textContent='JS error: '+(e.message||e.error||'unknown'); }catch(_){} });
+});
+</script>
+
+<!-- MINPATCH v2-fix3: remove Nasuni-* rows for AUSRUBRIK01/CARRUBRIK01, keep Rubrik-only; keep donut suppression and heading change -->
+<script>
+(function(){
+  const HIDE_TITLES = new Set(['netapp','datadomain','data domain','san switch']);
+  const RUBRIK_DEVICES = new Set(['AUSRUBRIK01','CARRUBRIK01']);
+  const NEW_HEADING = 'Backup & Storage Health Check Portal';
+
+  function text(el){ return (el && (el.textContent||'')).trim(); }
+  function lower(el){ return text(el).toLowerCase(); }
+  function up(s){ return String(s||'').trim().toUpperCase(); }
+
+  function setHeading(){
+    try{ const h = document.querySelector('header h1') || document.querySelector('h1'); if (h) h.textContent = NEW_HEADING; document.title = NEW_HEADING; }catch(e){}
+  }
+
+  function cardForChart(node){ let p=node; for(let i=0;i<10 && p && p.parentElement;i++){ const tag=(p.tagName||'').toUpperCase(); if(tag==='MAIN'||tag==='BODY'||tag==='HTML') return null; const cls=(p.className||'').toString().toLowerCase(); if(/(donut|chart|card|panel|widget|tile|box|grid|col|apex|echart|chartjs)/.test(cls)) return p; p=p.parentElement; } return null; }
+  function cardHasHideTitle(card){ if(!card) return false; const cands=card.querySelectorAll('.donut-title,.card-title,.tile-title,.panel-title,h1,h2,h3,h4,h5,h6,.apexcharts-title-text,.title'); for(const el of cands){ if(HIDE_TITLES.has(lower(el))) return true; } const tAll=lower(card); for(const t of HIDE_TITLES){ if(tAll.includes(t)) return true; } return false; }
+  function hideUnwantedDonuts(){ try{ const charts=document.querySelectorAll('canvas, svg, .apexcharts-canvas, [data-chart], [data-donut]'); const seen=new WeakSet(); charts.forEach(ch=>{ const card=cardForChart(ch); if(card && !seen.has(card)){ seen.add(card); if(cardHasHideTitle(card)) card.style.display='none'; } }); }catch(e){} }
+
+  // Remove duplicates and any Nasuni-* rows for these two devices; keep a single Rubrik row per device
+  function dedupeRubrikRows(){
+    try{
+      const tbl=document.querySelector('#devicesTable') || document.querySelector('table'); if(!tbl) return; const tbody=tbl.querySelector('tbody'); if(!tbody) return; const rows=Array.from(tbody.querySelectorAll('tr'));
+      const keepMap=new Map(); const toRemove=[];
+      function deviceNameFromRow(tr){ const tds=tr.querySelectorAll('td'); // try 2nd/3rd cells
+        for(const idx of [1,2]){ if(tds[idx]){ const val=text(tds[idx]); if(val) return up(val); } }
+        for(const td of tds){ const val=up(text(td)); if(RUBRIK_DEVICES.has(val)) return val; } return ''; }
+      function storageNameFromRow(tr){ const tds=tr.querySelectorAll('td'); for(const idx of [2,1,3]){ if(tds[idx]){ const v=text(tds[idx]); if(v) return v; } } return ''; }
+
+      rows.forEach(tr=>{
+        const tds=tr.querySelectorAll('td'); if(!tds || !tds.length) return; const dev=deviceNameFromRow(tr); if(!RUBRIK_DEVICES.has(dev)) return;
+        const typeCell=tds[0]; const typeVal=lower(typeCell); const isRubrik=typeVal.includes('rubrik'); const isNasuni=typeVal.includes('nasuni');
+        const storageName=storageNameFromRow(tr).toLowerCase();
+        // Remove explicit Nasuni-* rows for the device
+        if(storageName.startsWith('nasuni-') || isNasuni){ toRemove.push(tr); return; }
+        if(!keepMap.has(dev)){ keepMap.set(dev, {row:tr, isRubrik:isRubrik}); if(!isRubrik) { typeCell.textContent='Rubrik'; } }
+        else { const cur=keepMap.get(dev); // already have one row for this device
+          if(isRubrik && !cur.isRubrik){ toRemove.push(cur.row); keepMap.set(dev, {row:tr, isRubrik:true}); }
+          else { toRemove.push(tr); }
+        }
+      });
+      toRemove.forEach(tr=>{ try{ tr.remove(); }catch(e){} });
+    }catch(e){}
+  }
+
+  function run(){ setHeading(); hideUnwantedDonuts(); dedupeRubrikRows(); }
+  function after(ms){ try{ setTimeout(run, ms); }catch(e){} }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', ()=> after(50)); else after(50);
+  Array.from(document.querySelectorAll('input[type=file]')).forEach(inp=>{ inp.addEventListener('change', ()=>{ after(800); after(1600); after(2600); }); });
+  document.addEventListener('click', (e)=>{ const t=e.target; if(!t) return; const tag=(t.tagName||'').toUpperCase(); if(tag==='BUTTON'||tag==='SELECT'||(tag==='INPUT' && /checkbox|radio|button/.test(t.type))||t.getAttribute('role')==='button'){ after(300); } }, true);
+})();
+</script>
+</body>
+</html>
