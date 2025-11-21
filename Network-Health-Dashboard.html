@@ -1,0 +1,395 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Network Health Check Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b132b;
+      --panel: #1c2541;
+      --accent: #3a506b;
+      --primary: #5bc0be;
+      --ok: #2ecc71;
+      --warn: #f1c40f;
+      --bad: #e74c3c;
+      --text: #eaeaea;
+    }
+    body {font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); margin:0;}
+    header {padding: 18px 24px; background: var(--panel); display:flex; gap:16px; align-items:center; flex-wrap:wrap;}
+    h1 {font-size: 20px; margin:0;}
+    .upload {display:flex; gap:12px; flex-wrap:wrap; align-items:center;}
+    .card {background: var(--panel); border-radius: 10px; padding: 16px; box-shadow: 0 6px 16px rgba(0,0,0,.25);}    
+    .grid {display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;}
+    .kpi {display:flex; justify-content:space-between; align-items:center;}
+    .kpi .value {font-size: 28px; font-weight:700;}
+    .kpi .label {font-size: 13px; opacity:.85;}
+    .pill {display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background: var(--accent);}
+    .pill.ok {background: rgba(46,204,113,.18); color: var(--ok);} 
+    .pill.warn {background: rgba(241,196,15,.18); color: var(--warn);} 
+    .pill.bad {background: rgba(231,76,60,.18); color: var(--bad);} 
+    .tabs {display:flex; gap:8px; margin:16px 0; flex-wrap:wrap;}
+    .tabs button {background: var(--panel); border:1px solid var(--accent); color: var(--text); padding:8px 12px; border-radius:8px; cursor:pointer;}
+    .tabs button.active {border-color: var(--primary); box-shadow: 0 0 0 2px rgba(91,192,190,.25);}    
+    .section {display:none;} .section.active {display:block;}    
+    table {width:100%; border-collapse: collapse;}
+    th, td {padding:8px 10px; border-bottom: 1px solid rgba(255,255,255,.08);}
+    th {text-align:left; background:rgba(255,255,255,.04);}    
+    .footer {text-align:center; padding:10px; opacity:.7}
+    a {color: var(--primary);}    
+  </style>
+  <!-- Libraries from CDN (use online). If offline, download these files and host locally. -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
+</head>
+<body>
+  <header>
+    <h1>Network Health Check Dashboard</h1>
+    <div class="upload">
+      <label class="pill" title="Upload .xlsx health check files">
+        <input id="fileInput" type="file" accept=".xlsx" multiple style="display:none" />
+        <span>➕ Upload .xlsx</span>
+      </label>
+      <span id="fileCount" class="pill">No files loaded</span>
+      <span id="locations" class="pill"></span>
+    </div>
+  </header>
+  <main style="padding: 18px;">
+    <div class="grid">
+      <div class="card">
+        <div class="kpi"><div class="label">Total Days</div><div class="value" id="kpiDays">0</div></div>
+        <div class="kpi"><div class="label">Auth Failure (johnwiley) — median %</div><div class="value" id="kpiAuthJW">–</div></div>
+        <div class="kpi"><div class="label">Auth Failure (JWS) — median %</div><div class="value" id="kpiAuthJWS">–</div></div>
+      </div>
+      <div class="card">
+        <div class="kpi"><div class="label">Days w/ Rogue SSIDs</div><div class="value" id="kpiRogueDays">0</div></div>
+        <div class="kpi"><div class="label">Total Spoofs Reported</div><div class="value" id="kpiSpoofs">0</div></div>
+        <div class="kpi"><div class="label">No Packet Loss Days</div><div class="value" id="kpiNoLoss">0</div></div>
+      </div>
+      <div class="card">
+        <canvas id="authTrend" height="140"></canvas>
+      </div>
+      <div class="card">
+        <canvas id="rogueTrend" height="140"></canvas>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button data-id="overview" class="active">Overview</button>
+      <button data-id="details">Checklist Details</button>
+      <button data-id="alerts">Alerts & Exceptions</button>
+      <button data-id="raw">Raw Extract</button>
+    </div>
+
+    <section id="overview" class="section active">
+      <div class="card">
+        <p>Upload one or more Excel (.xlsx) health check files (e.g., Hoboken, Oxford). The dashboard auto-parses key metrics like Authentication Failures by SSID, Air Marshal Rogue/Spoof counts, Ping packet loss and general “All green” statuses.</p>
+        <ul>
+          <li>Supports multiple locations in one view.</li>
+          <li>Traces trends by date across sheets.</li>
+          <li>Works fully in the browser—no backend required.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="details" class="section">
+      <div class="card" style="overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Location</th>
+              <th>Auth % (johnwiley)</th>
+              <th>Auth % (JWS)</th>
+              <th>Timeout % (johnwiley)</th>
+              <th>Timeout % (JWS)</th>
+              <th>DHCP % (johnwiley)</th>
+              <th>DHCP % (JWS)</th>
+              <th>Rogue SSIDs</th>
+              <th>Spoofs</th>
+              <th>Packet Loss</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="detailsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="alerts" class="section">
+      <div id="alertsList" class="grid"></div>
+    </section>
+
+    <section id="raw" class="section">
+      <div class="card">
+        <pre id="rawJson" style="white-space:pre-wrap"></pre>
+      </div>
+    </section>
+  </main>
+  <div class="footer">Built for Service Delivery health checks — inline parsing of Meraki/ThousandEyes/Zabbix notes</div>
+
+<script>
+  const fmtDate = (d)=> new Date(d);
+  const safeNum = (v)=> (Number.isFinite(v)? v : null);
+
+  function median(values){
+    const arr = values.filter(v=>Number.isFinite(v)).sort((a,b)=>a-b);
+    if(arr.length===0) return null;
+    const mid = Math.floor(arr.length/2);
+    return arr.length%2? arr[mid] : (arr[mid-1]+arr[mid])/2;
+  }
+
+  function locationFromFilename(name){
+    const base = name.toLowerCase();
+    if(base.includes('hoboken')) return 'Hoboken';
+    if(base.includes('oxford')) return 'Oxford';
+    return name.replace(/\.[^.]+$/, '');
+  }
+
+  function textifySheet(ws){
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+    const flat = rows.flat().filter(Boolean).map(x=> String(x));
+    return flat;
+  }
+
+  function dateFromSheetName(name){
+    // Attempt to parse date from sheet name like "5th Nov 2025" or "02nd June 2025"
+    const s = name.replace(/##\s*/, '');
+    // Normalize ordinal suffixes
+    const norm = s.replace(/(\d+)(st|nd|rd|th)/gi, '$1');
+    const tryDate = Date.parse(norm);
+    if(!isNaN(tryDate)) return new Date(tryDate);
+    return null;
+  }
+
+  function extractMetrics(cells){
+    // cells: array of strings found in sheet
+    let rogue = null, spoof = null;
+    let authJW = null, authJWS = null, authWiley = null;
+    let timeoutJW = null, timeoutJWS = null;
+    let dhcpJW = null, dhcpJWS = null;
+    let packetLoss = null; // true/false/null
+    let notes = [];
+
+    for(const line of cells){
+      // Air Marshal
+      let m = line.match(/Air\s*Marshal\s*reported\s*(\d+)\s*rogue\s*SSIDs\s*and\s*(\d+)\s*spoof/i);
+      if(m){ rogue = parseInt(m[1],10); spoof = parseInt(m[2],10); continue; }
+      m = line.match(/Air\s*Marshal\s*reported\s*(\d+)\s*rogue/i);
+      if(m && rogue==null){ rogue = parseInt(m[1],10); }
+      m = line.match(/and\s*(\d+)\s*spoof/i);
+      if(m && spoof==null){ spoof = parseInt(m[1],10); }
+
+      // Authentication failures
+      m = line.match(/([0-9]+(?:\.[0-9]+)?)%\s*(?:authentication|auth)\s*failures\s*observed\s*for\s*(johnwiley|JWS|Wiley)\s*SSID/i);
+      if(m){
+        const pct = parseFloat(m[1]);
+        const ssid = m[2].toLowerCase();
+        if(ssid==='johnwiley') authJW = pct;
+        else if(ssid==='jws') authJWS = pct;
+        else if(ssid==='wiley') authWiley = pct;
+        continue;
+      }
+
+      // radius timeout failures
+      m = line.match(/([0-9]+(?:\.[0-9]+)?)%\s*(?:radius\s*)?timeout\s*failures\s*observed\s*for\s*(johnwiley|JWS)\s*SSID/i);
+      if(m){
+        const pct = parseFloat(m[1]);
+        const ssid = m[2].toLowerCase();
+        if(ssid==='johnwiley') timeoutJW = pct; else timeoutJWS = pct;
+        continue;
+      }
+
+      // DHCP failures
+      m = line.match(/([0-9]+(?:\.[0-9]+)?)%\s*DHCP\s*failures\s*observed\s*for\s*(johnwiley|JWS)\s*SSID/i);
+      if(m){
+        const pct = parseFloat(m[1]);
+        const ssid = m[2].toLowerCase();
+        if(ssid==='johnwiley') dhcpJW = pct; else dhcpJWS = pct;
+        continue;
+      }
+
+      // Packet loss indicator
+      if(/No\s*packet\s*loss\s*observed/i.test(line)) packetLoss = false;
+      if(/packet\s*loss/i.test(line) && /observed/i.test(line) && /No/i.test(line)===false){ packetLoss = true; }
+
+      // Generic green/notes
+      if(/All\s*green/i.test(line)) notes.push('All green');
+      if(/error\s*logs\s*were\s*identified/i.test(line)) notes.push('Errors in logs');
+      if(/No\s*error\s*logs/i.test(line)) notes.push('No switch errors');
+    }
+
+    return {rogue, spoof, authJW, authJWS, authWiley, timeoutJW, timeoutJWS, dhcpJW, dhcpJWS, packetLoss, notes: Array.from(new Set(notes)).join('; ')};
+  }
+
+  const state = { rows: [], locations: new Set() };
+
+  async function handleFiles(files){
+    state.rows = []; state.locations = new Set();
+    const fileCount = document.getElementById('fileCount');
+    const locSpan = document.getElementById('locations');
+    fileCount.textContent = `${files.length} file(s)`;
+
+    for(const file of files){
+      const wb = await readXLSX(file);
+      const location = locationFromFilename(file.name);
+      state.locations.add(location);
+      for(const name of wb.SheetNames){
+        const ws = wb.Sheets[name];
+        const cells = textifySheet(ws);
+        const metrics = extractMetrics(cells);
+        const date = dateFromSheetName(name) || inferDateFromCells(cells) || new Date();
+        state.rows.push({date, location, ...metrics});
+      }
+    }
+
+    locSpan.textContent = Array.from(state.locations).join(', ');
+    renderAll();
+  }
+
+  function inferDateFromCells(cells){
+    for(const s of cells){
+      const m = s.match(/(\d{1,2})(st|nd|rd|th)?\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})/i);
+      if(m){
+        const day = m[1]; const mon = m[3]; const yr = m[4];
+        const val = Date.parse(`${day} ${mon} ${yr}`);
+        if(!isNaN(val)) return new Date(val);
+      }
+    }
+    return null;
+  }
+
+  function renderAll(){
+    // Sort by date
+    state.rows.sort((a,b)=> a.date - b.date);
+
+    // KPIs
+    document.getElementById('kpiDays').textContent = state.rows.length;
+    const medAuthJW = median(state.rows.map(r=> r.authJW)).toFixed(1);
+    const medAuthJWS = median(state.rows.map(r=> r.authJWS)).toFixed(1);
+    document.getElementById('kpiAuthJW').textContent = (medAuthJW==='NaN'? '–' : medAuthJW+'%');
+    document.getElementById('kpiAuthJWS').textContent = (medAuthJWS==='NaN'? '–' : medAuthJWS+'%');
+
+    const rogueDays = state.rows.filter(r=> Number.isFinite(r.rogue) && r.rogue>0).length;
+    const totalSpoofs = state.rows.reduce((acc,r)=> acc + (Number.isFinite(r.spoof)? r.spoof : 0), 0);
+    const noLossDays = state.rows.filter(r=> r.packetLoss===false).length;
+    document.getElementById('kpiRogueDays').textContent = rogueDays;
+    document.getElementById('kpiSpoofs').textContent = totalSpoofs;
+    document.getElementById('kpiNoLoss').textContent = noLossDays;
+
+    // Details table
+    const tbody = document.getElementById('detailsBody');
+    tbody.innerHTML = '';
+    for(const r of state.rows){
+      const tr = document.createElement('tr');
+      const fmt = r.date.toISOString().slice(0,10);
+      tr.innerHTML = `
+        <td>${fmt}</td>
+        <td>${r.location}</td>
+        <td>${r.authJW?.toFixed?.(1) ?? ''}</td>
+        <td>${r.authJWS?.toFixed?.(1) ?? ''}</td>
+        <td>${r.timeoutJW?.toFixed?.(1) ?? ''}</td>
+        <td>${r.timeoutJWS?.toFixed?.(1) ?? ''}</td>
+        <td>${r.dhcpJW?.toFixed?.(1) ?? ''}</td>
+        <td>${r.dhcpJWS?.toFixed?.(1) ?? ''}</td>
+        <td>${Number.isFinite(r.rogue)? r.rogue : ''}</td>
+        <td>${Number.isFinite(r.spoof)? r.spoof : ''}</td>
+        <td>${r.packetLoss===false? 'No' : (r.packetLoss===true? 'Yes' : '')}</td>
+        <td>${r.notes || ''}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    // Alerts & Exceptions
+    const alerts = document.getElementById('alertsList');
+    alerts.innerHTML='';
+    for(const r of state.rows){
+      const msgs = [];
+      if(Number.isFinite(r.authJW) && r.authJW >= 20) msgs.push(`High auth failures on johnwiley: ${r.authJW}%`);
+      if(Number.isFinite(r.authJWS) && r.authJWS >= 10) msgs.push(`Auth failures on JWS: ${r.authJWS}%`);
+      if(Number.isFinite(r.timeoutJW) && r.timeoutJW >= 10) msgs.push(`Timeout failures on johnwiley: ${r.timeoutJW}%`);
+      if(Number.isFinite(r.timeoutJWS) && r.timeoutJWS >= 10) msgs.push(`Timeout failures on JWS: ${r.timeoutJWS}%`);
+      if(Number.isFinite(r.dhcpJWS) && r.dhcpJWS >= 5) msgs.push(`DHCP failures on JWS: ${r.dhcpJWS}%`);
+      if(Number.isFinite(r.rogue) && r.rogue > 0) msgs.push(`${r.rogue} Rogue SSIDs detected`);
+      if(r.packetLoss===true) msgs.push(`Packet loss observed`);
+      if(msgs.length){
+        const card = document.createElement('div'); card.className='card';
+        card.innerHTML = `<div class="kpi"><div class="label">${r.location} — ${r.date.toISOString().slice(0,10)}</div>
+                          <div class="pill bad">Alert</div></div>
+                          <ul>${msgs.map(m=>`<li>${m}</li>`).join('')}</ul>`;
+        alerts.appendChild(card);
+      }
+    }
+
+    // Charts
+    renderCharts();
+
+    // Raw JSON
+    document.getElementById('rawJson').textContent = JSON.stringify(state.rows, null, 2);
+  }
+
+  function renderCharts(){
+    const labels = state.rows.map(r=> r.date);
+    const jw = state.rows.map(r=> safeNum(r.authJW));
+    const jws = state.rows.map(r=> safeNum(r.authJWS));
+    const rogue = state.rows.map(r=> safeNum(r.rogue));
+
+    const authEl = document.getElementById('authTrend');
+    if(window._authChart) window._authChart.destroy();
+    window._authChart = new Chart(authEl, {
+      type:'line',
+      data:{
+        labels,
+        datasets:[
+          {label:'johnwiley — Auth failures %', data:jw, borderColor:'#5bc0be', backgroundColor:'rgba(91,192,190,.2)', spanGaps:true},
+          {label:'JWS — Auth failures %', data:jws, borderColor:'#e56b6f', backgroundColor:'rgba(229,107,111,.2)', spanGaps:true}
+        ]
+      },
+      options:{
+        responsive:true,
+        plugins:{ legend:{position:'bottom'} },
+        scales:{ x:{ type:'time', time:{ unit:'day' } }, y:{ title:{display:true, text:'%'} } }
+      }
+    });
+
+    const rogueEl = document.getElementById('rogueTrend');
+    if(window._rogueChart) window._rogueChart.destroy();
+    window._rogueChart = new Chart(rogueEl, {
+      type:'bar',
+      data:{ labels, datasets:[{label:'Rogue SSIDs', data: rogue, backgroundColor:'#f1c40f'}] },
+      options:{ responsive:true, plugins:{ legend:{position:'bottom'} }, scales:{ x:{ type:'time', time:{ unit:'day'} } } }
+    });
+  }
+
+  function readXLSX(file){
+    return new Promise(resolve=>{
+      const reader = new FileReader();
+      reader.onload = e => {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, {type:'array'});
+        resolve(wb);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  // Tabs logic
+  document.querySelectorAll('.tabs button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tabs button').forEach(b=> b.classList.remove('active'));
+      btn.classList.add('active');
+      const id = btn.dataset.id;
+      document.querySelectorAll('.section').forEach(sec=> sec.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    });
+  });
+
+  document.getElementById('fileInput').addEventListener('change', (e)=>{
+    const files = Array.from(e.target.files);
+    handleFiles(files);
+  });
+</script>
+</body>
+</html>
