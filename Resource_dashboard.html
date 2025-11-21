@@ -1,0 +1,389 @@
+
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <title>CMI Resources Dashboard</title>
+  <!-- Google Fonts -->
+  <link href='https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap' rel='stylesheet'>
+  <!-- Icons -->
+  <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css'>
+  <!-- DataTables -->
+  <link rel='stylesheet' href='https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css'>
+  <link rel='stylesheet' href='https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css'>
+  <!-- jQuery & DataTables JS -->
+  <script src='https://code.jquery.com/jquery-3.6.0.min.js'></script>
+  <script src='https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js'></script>
+  <script src='https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js'></script>
+  <script src='https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js'></script>
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'></script>
+  <!-- SheetJS for Excel parsing -->
+  <script src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'></script>
+  <style>
+    /* Light theme defaults */
+    :root {
+      --bg:#f6f8fc; --panel:#ffffff; --border:#e4e7f1; --accent:#3b82f6; --muted:#50618a; --text:#0b1021; --chip:#eef2ff;
+      --input:#f0f3fb; --input-border:#d5dbed; --table-bg:#ffffff; --table-header:#f2f4fa; --table-text:#0b1021;
+    }
+    body[data-theme='dark'] {
+      --bg:#0b1021; --panel:#121735; --border:#1f2648; --accent:#3b82f6; --muted:#8ea2c8; --text:#e5ebff; --chip:#1d2246;
+      --input:#0f1533; --input-border:#283058; --table-bg:#121735; --table-header:#0f1533; --table-text:#e5ebff;
+    }
+    html,body { height:100%; background:var(--bg); color:var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    .container { max-width:1200px; margin:0 auto; padding:24px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    h1 { margin:0; font-size:28px; font-weight:700; }
+    .sub { color:var(--muted); }
+    .panel { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:16px; margin-top:16px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:14px; }
+    .block { display:flex; flex-direction:column; gap:8px; }
+    label { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+    input[type='text'], select, button { background:var(--input); border:1px solid var(--input-border); color:var(--text); padding:10px 12px; border-radius:10px; }
+    input[type='file'] { color:var(--text); }
+    .badges { display:flex; gap:8px; align-items:center; }
+    .badge { background:var(--chip); padding:6px 10px; border-radius:999px; font-size:12px; color:var(--muted); }
+    .accent { color:var(--accent); }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .btn-primary { background:var(--accent); border:1px solid var(--accent); color:#fff; font-weight:600; cursor:pointer; }
+    .btn-outline { background:transparent; border:1px solid var(--input-border); color:var(--text); font-weight:600; cursor:pointer; }
+    .btn-outline:hover { border-color:var(--accent); color:var(--accent); }
+    table.dataTable { width:100% !important; color:var(--table-text); }
+    table.dataTable thead th { background:var(--table-header); color:var(--table-text); }
+    table.dataTable tbody tr { background:var(--table-bg); }
+    .dt-container { margin-top:14px; }
+    .dataTables_wrapper .dataTables_filter input,
+    .dataTables_wrapper .dataTables_length select { background:var(--input); border:1px solid var(--input-border); color:var(--text); padding:8px 10px; border-radius:8px; }
+    .dataTables_wrapper .dataTables_info { color:var(--muted); }
+    .dataTables_wrapper .dt-buttons .dt-button { background:var(--accent); border:none; color:#fff; border-radius:8px; }
+    .dt-search { display:none; } /* hide built-in search (we'll use our global search box) */
+    .footer { margin-top:18px; color:var(--muted); font-size:12px; }
+    .toggle { display:flex; align-items:center; gap:8px; }
+    .toggle .btn-outline { display:flex; align-items:center; gap:8px; }
+    .feedback-input { width: 100%; box-sizing: border-box; }
+    .sticky-actions { position: sticky; top: 8px; }
+  </style>
+</head>
+<body>
+  <div class='container'>
+    <header>
+      <div>
+        <h1><i class='fa-solid fa-users'></i> CMI Resources Dashboard</h1>
+        <div class='sub'>Single page. Upload Excel, filter by <span class='accent'>Grade</span> and <span class='accent'>Location</span>. Global search matches name, skills, grade, emp no, contact, etc.</div>
+      </div>
+      <div class='toggle'>
+        <button class='btn-outline' id='themeToggle' title='Toggle light/dark theme'>
+          <i id='themeIcon' class='fa-solid fa-sun'></i>
+          <span id='themeLabel'>Light</span> mode
+        </button>
+      </div>
+    </header>
+
+    <section class='panel'>
+      <div class='grid'>
+        <div class='block'>
+          <label>Upload Excel</label>
+          <input type='file' id='fileInput' accept='.xlsx,.xls' />
+          <small id='status' class='sub'>No file loaded</small>
+        </div>
+        <div class='block'>
+          <label>Sheet</label>
+          <select id='sheetSelect'></select>
+        </div>
+        <div class='block'>
+          <label>Search (name / skills / grade / emp no)</label>
+          <input type='text' id='globalSearch' placeholder='Type to search…' />
+        </div>
+      </div>
+
+      <div class='grid' style='margin-top:10px;'>
+        <div class='block'>
+          <label>Location</label>
+          <select id='locationSelect' multiple size='6'></select>
+        </div>
+        <div class='block'>
+          <label>Grade</label>
+          <select id='gradeSelect' multiple size='6'></select>
+        </div>
+        <div class='block sticky-actions'>
+          <label>Quick Actions</label>
+          <div class='actions'>
+            <button class='btn-primary' id='downloadCsv'><i class='fa-solid fa-file-arrow-down'></i> Export filtered CSV</button>
+            <button class='btn-outline' id='clearFilters'><i class='fa-solid fa-broom'></i> Reset filters</button>
+            <button class='btn-outline' id='exportFeedback'><i class='fa-solid fa-cloud-arrow-down'></i> Export feedback JSON</button>
+            <label class='btn-outline' for='importFeedbackInput' style='cursor:pointer;'>
+              <i class='fa-solid fa-cloud-arrow-up'></i> Import feedback JSON
+            </label>
+            <input id='importFeedbackInput' type='file' accept='.json,application/json' style='display:none;'>
+            <button class='btn-outline' id='clearFeedback'><i class='fa-solid fa-trash-can'></i> Clear all feedback</button>
+          </div>
+          <div class='badges' style='margin-top:10px;'>
+            <div class='badge'>Records: <span id='totalRecords'>0</span></div>
+            <div class='badge'>Filtered: <span id='filteredRecords'>0</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class='dt-container'>
+        <table id='dataTable' class='display nowrap' style='width:100%'>
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class='footer'>Client-side only. Your file stays in the browser. Uses SheetJS and DataTables. Theme & feedback persist (localStorage). Paging is disabled (all entries shown on one page).</div>
+    </section>
+  </div>
+
+<script>
+(function(){
+  // Theme handling
+  const THEME_KEY = 'cmi.theme';
+  const themeToggle = document.getElementById('themeToggle');
+  const themeIcon = document.getElementById('themeIcon');
+  const themeLabel = document.getElementById('themeLabel');
+
+  function preferredTheme(){
+    const saved = localStorage.getItem(THEME_KEY);
+    if(saved) return saved;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  function applyTheme(theme){
+    document.body.setAttribute('data-theme', theme);
+    themeLabel.textContent = theme === 'dark' ? 'Dark' : 'Light';
+    themeIcon.className = theme === 'dark' ? 'fa-solid fa-moon' : 'fa-solid fa-sun';
+  }
+  function toggleTheme(){
+    const current = document.body.getAttribute('data-theme') || preferredTheme();
+    const next = current === 'dark' ? 'light' : 'dark';
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+  }
+  window.addEventListener('DOMContentLoaded', () => applyTheme(preferredTheme()));
+  themeToggle.addEventListener('click', toggleTheme);
+
+  // Dashboard logic
+  const FEEDBACK_KEY = 'cmi.feedback.v1';
+  let workbook = null;
+  let rawData = [];
+  let filteredData = [];
+  let dt = null;
+  let gradeCol = null;
+  let locationCol = null;
+  let empCol = null;
+  let feedbackMap = {};
+
+  const fileInput = document.getElementById('fileInput');
+  const sheetSelect = document.getElementById('sheetSelect');
+  const globalSearch = document.getElementById('globalSearch');
+  const gradeSelect = document.getElementById('gradeSelect');
+  const locationSelect = document.getElementById('locationSelect');
+  const statusEl = document.getElementById('status');
+  const totalRecords = document.getElementById('totalRecords');
+  const filteredRecords = document.getElementById('filteredRecords');
+  const clearBtn = document.getElementById('clearFilters');
+  const downloadBtn = document.getElementById('downloadCsv');
+  const exportFeedbackBtn = document.getElementById('exportFeedback');
+  const importFeedbackInput = document.getElementById('importFeedbackInput');
+  const clearFeedbackBtn = document.getElementById('clearFeedback');
+
+  // Load feedback from localStorage
+  function loadFeedback(){
+    try{ feedbackMap = JSON.parse(localStorage.getItem(FEEDBACK_KEY) || '{}') || {}; }
+    catch(e){ feedbackMap = {}; }
+  }
+  // Save feedback to localStorage
+  function saveFeedback(){
+    try{ localStorage.setItem(FEEDBACK_KEY, JSON.stringify(feedbackMap)); } catch(e){ /* quota exceeded? */ }
+  }
+  // Export feedback as downloadable JSON
+  function exportFeedback(){
+    const blob = new Blob([JSON.stringify(feedbackMap, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='cmi_feedback.json'; a.click(); URL.revokeObjectURL(url);
+  }
+  // Import feedback from a JSON file
+  function importFeedback(file){
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const obj = JSON.parse(e.target.result);
+        if(obj && typeof obj === 'object'){
+          feedbackMap = obj; saveFeedback();
+          // Re-render inputs to reflect imported values
+          if(dt) dt.rows().invalidate().draw(false);
+        }
+      } catch(err){ alert('Invalid JSON file for feedback.'); }
+    };
+    reader.readAsText(file);
+  }
+
+  // Event bindings
+  fileInput.addEventListener('change', handleFile);
+  sheetSelect.addEventListener('change', () => loadSheet(sheetSelect.value));
+  globalSearch.addEventListener('input', () => dt && dt.search(globalSearch.value).draw());
+  gradeSelect.addEventListener('change', applyFilters);
+  locationSelect.addEventListener('change', applyFilters);
+  clearBtn.addEventListener('click', clearFilters);
+  downloadBtn.addEventListener('click', downloadCSV);
+  exportFeedbackBtn.addEventListener('click', exportFeedback);
+  importFeedbackInput.addEventListener('change', (e)=>{ const f=e.target.files[0]; if(f) importFeedback(f); e.target.value=''; });
+  clearFeedbackBtn.addEventListener('click', ()=>{ if(confirm('Clear ALL saved feedback?')){ feedbackMap = {}; saveFeedback(); if(dt) dt.rows().invalidate().draw(false); }});
+
+  // Capture feedback edits (event delegation)
+  document.addEventListener('input', function(e){
+    if(e.target && e.target.classList.contains('feedback-input')){
+      const key = e.target.getAttribute('data-key');
+      feedbackMap[key] = e.target.value;
+      saveFeedback();
+    }
+  });
+
+  // Initialize feedback storage
+  loadFeedback();
+
+  function handleFile(evt){
+    const file = evt.target.files[0];
+    if(!file) return;
+    statusEl.textContent = 'Reading file…';
+    const reader = new FileReader();
+    reader.onload = e => {
+      const data = new Uint8Array(e.target.result);
+      workbook = XLSX.read(data, {type:'array'});
+      statusEl.textContent = 'Workbook loaded';
+      populateSheetNames(workbook.SheetNames);
+    };
+    reader.onerror = () => statusEl.textContent = 'Error reading file';
+    reader.readAsArrayBuffer(file);
+  }
+
+  function populateSheetNames(names){
+    sheetSelect.innerHTML = '';
+    names.forEach(n => { const o = document.createElement('option'); o.value=n; o.textContent=n; sheetSelect.appendChild(o); });
+    if(names.length) loadSheet(names[0]);
+  }
+
+  function loadSheet(name){
+    const ws = workbook.Sheets[name];
+    rawData = XLSX.utils.sheet_to_json(ws, {defval:'', raw:false});
+    rawData = rawData.map(row => {
+      const out = {}; Object.keys(row).forEach(k=>{ out[(k||'').toString().trim()] = row[k]; }); return out;
+    });
+
+    detectColumns();
+    populateFilterOptions();
+    buildDataTable();
+    applyFilters();
+    totalRecords.textContent = rawData.length;
+  }
+
+  function detectColumns(){
+    const cols = Object.keys(rawData[0]||{});
+    gradeCol = null; locationCol = null; empCol = null;
+    cols.forEach(c=>{
+      const t = c.toLowerCase();
+      if(!gradeCol && t.includes('grade')) gradeCol = c;
+      if(!locationCol && (t.includes('location')||t.includes('branch')||t.includes('depute')||t.includes('office'))) locationCol = c;
+      if(!empCol && (t.includes('emp') && (t.includes('#')||t.includes('no')||t.includes('id')))) empCol = c;
+    });
+  }
+
+  function opts(selectEl, values){
+    selectEl.innerHTML = '';
+    values.forEach(v=>{ const o = document.createElement('option'); o.value=v; o.textContent=v; selectEl.appendChild(o); });
+  }
+
+  function unique(list){ return Array.from(new Set(list.filter(v=>String(v??'').trim()!==''))).sort(); }
+
+  function populateFilterOptions(){
+    if(gradeCol) opts(gradeSelect, unique(rawData.map(r=> r[gradeCol])));
+    if(locationCol) opts(locationSelect, unique(rawData.map(r=> r[locationCol])));
+  }
+
+  function getSelected(el){ return Array.from(el.selectedOptions).map(o=>o.value); }
+
+  function keyForRow(row){
+    // Prefer Emp #/ID as unique stable key; fallback to composite
+    if(empCol) return 'EMP:' + String(row[empCol]);
+    const name = row['Emp Name']||row['Employee Name']||row['Name']||'';
+    return 'ROW:' + [name, row[gradeCol]||'', row[locationCol]||''].join('|');
+  }
+
+  function applyFilters(){
+    const gs = gradeCol ? getSelected(gradeSelect) : [];
+    const ls = locationCol ? getSelected(locationSelect) : [];
+    filteredData = rawData.filter(r=>{
+      let ok = true;
+      if(gradeCol && gs.length) ok = ok && gs.includes(r[gradeCol]);
+      if(locationCol && ls.length) ok = ok && ls.includes(r[locationCol]);
+      return ok;
+    });
+    if(dt){ dt.clear(); dt.rows.add(filteredData).draw(false); }
+    filteredRecords.textContent = filteredData.length;
+  }
+
+  function buildDataTable(){
+    if(dt) { dt.destroy(); dt = null; }
+    const cols = Object.keys(rawData[0]||{});
+    const columnDefs = cols.map(c=> ({ title:c, data:c }));
+    // Append Feedback column with input
+    columnDefs.push({
+      title:'Feedback', data:null, orderable:false, searchable:false,
+      render: function(data,type,row,meta){
+        const key = keyForRow(row);
+        const val = feedbackMap[key] || '';
+        const escAttr = String(val).replace(/"/g,'&quot;');
+        return `<input type=\"text\" class=\"feedback-input\" data-key=\"${key}\" value=\"${escAttr}\" placeholder=\"Enter feedback\" />`;
+      }
+    });
+
+    dt = $('#dataTable').DataTable({
+      data: [],
+      columns: columnDefs,
+      paging: false,           // show all entries on one page
+      searching: true,
+      scrollX: true,
+      dom: 'Bfrtip',
+      buttons: [{ extend:'csvHtml5', title:'filtered_data_table_only' }], // built-in export (excludes inputs)
+      language: {
+        emptyTable:'Upload a file to view data',
+        search:'',
+        info:'Showing _TOTAL_ entries',
+        lengthMenu:'Show _MENU_ entries'
+      }
+    });
+  }
+
+  function toCSVWithFeedback(arr){
+    if(!arr.length) return '';
+    const cols = Object.keys(arr[0]);
+    const allCols = [...cols, 'Feedback'];
+    const esc = v => '"'+String(v??'').replace(/"/g,'""')+'"';
+    const head = allCols.map(esc).join(',');
+    const lines = arr.map(r => {
+      const key = keyForRow(r);
+      const fb = feedbackMap[key] || '';
+      return cols.map(c=> esc(r[c])).concat(esc(fb)).join(',');
+    });
+    return [head, ...lines].join('\n');
+  }
+
+  function downloadCSV(){
+    const csv = toCSVWithFeedback(filteredData);
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='filtered_data_with_feedback.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function clearFilters(){
+    Array.from(gradeSelect.options).forEach(o=> o.selected=false);
+    Array.from(locationSelect.options).forEach(o=> o.selected=false);
+    globalSearch.value='';
+    if(dt){ dt.search(''); }
+    applyFilters();
+  }
+})();
+</script>
+</body>
+</html>
