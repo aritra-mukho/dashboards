@@ -63,8 +63,39 @@
     .feedback-input { width: 100%; box-sizing: border-box; }
     .sticky-actions { position: sticky; top: 8px; }
   </style>
+
+  <style>
+    :root{color-scheme: light dark}
+    body{font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
+    .cmi-lock{display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px;background:canvas;color:canvastext}
+    .cmi-card{width:100%;max-width:420px;border:1px solid color-mix(in oklab, canvastext 20%, transparent);border-radius:12px;padding:24px;background:color-mix(in oklab, canvas 85%, white 15%);box-shadow:0 2px 12px color-mix(in oklab, canvastext 8%, transparent)}
+    .cmi-card h1{font-size:1.25rem;margin:0 0 8px}
+    .cmi-card p{margin:0 0 16px;color:color-mix(in oklab, canvastext 60%, transparent)}
+    .cmi-card label{display:block;margin:12px 0 6px}
+    .cmi-card input{width:100%;padding:10px;border:1px solid color-mix(in oklab, canvastext 20%, transparent);border-radius:8px;background:canvas;color:canvastext}
+    .cmi-btn{margin-top:14px;width:100%;padding:10px 14px;border:0;border-radius:8px;background:#2563eb;color:#fff;font-weight:600}
+    .cmi-error{color:#b00020;margin-top:10px;display:none}
+  </style>
 </head>
 <body>
+
+  <section class="cmi-lock" id="cmiLock">
+    <div class="cmi-card">
+      <h1>Protected Page</h1>
+      <p>Sign in to view the CMI Resources Dashboard.</p>
+      <form id="cmiLoginForm">
+        <label for="cmiUser">Username</label>
+        <input id="cmiUser" name="username" type="text" autocomplete="username" required />
+        <label for="cmiPass">Password</label>
+        <input id="cmiPass" name="password" type="password" autocomplete="current-password" required />
+        <button class="cmi-btn" type="submit">Sign in</button>
+        <div class="cmi-error" id="cmiErr">Invalid credentials. Try again.</div>
+      </form>
+    </div>
+  </section>
+
+<section id="cmiContent" style="display:none">
+
   <div class='container'>
     <header>
       <div>
@@ -385,5 +416,43 @@
   }
 })();
 </script>
+
+</section>
+
+  <script>
+    const CMI_AUTH = { username: 'admin', passwordHash: '5f795bc3873f97bc4ed1e1cf4ee1706022f42d8ae011ebaaafa6916f5eee4608' };
+
+    async function sha256Hex(str){
+      const enc = new TextEncoder().encode(str);
+      const dig = await crypto.subtle.digest('SHA-256', enc);
+      const bytes = new Uint8Array(dig);
+      return [...bytes].map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+
+    const loginForm = document.getElementById('cmiLoginForm');
+    const errEl = document.getElementById('cmiErr');
+    const lock = document.getElementById('cmiLock');
+    const content = document.getElementById('cmiContent');
+
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const u = document.getElementById('cmiUser').value.trim();
+      const p = document.getElementById('cmiPass').value;
+      const ph = await sha256Hex(p);
+      const ok = (u === CMI_AUTH.username) && (ph === CMI_AUTH.passwordHash);
+      if(!ok){
+        errEl.style.display = 'block';
+        return;
+      }
+      sessionStorage.setItem('cmi_auth_ok','1');
+      lock.style.display = 'none';
+      content.style.display = 'block';
+    });
+
+    if(sessionStorage.getItem('cmi_auth_ok') === '1'){
+      lock.style.display = 'none';
+      content.style.display = 'block';
+    }
+  </script>
 </body>
 </html>
