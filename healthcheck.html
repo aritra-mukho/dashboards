@@ -1,0 +1,78 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Health Check dashboards</title>
+  <style>
+    :root {
+      --bg: #0f172a; --card: #111827; --text: #e5e7eb; --muted: #94a3b8; --accent: #22c55e; --accent-2: #60a5fa; --border: #1f2937;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0)); position: sticky; top: 0; z-index: 10; }
+    header h1 { font-size: 18px; margin: 0; }
+    .tabs { display: flex; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.03); }
+    .tab { padding: 10px 16px; border-radius: 8px; cursor: pointer; color: var(--text); border: 1px solid transparent; font-size: 14px; }
+    .tab:hover { background: rgba(255,255,255,0.06); border-color: var(--border); }
+    .tab.active { background: rgba(34,197,94,0.15); border-color: rgba(34,197,94,0.4); }
+    .content { position: relative; height: calc(100% - 98px); }
+    .panel { position: absolute; inset: 0; display: none; }
+    .panel.active { display: block; }
+    iframe { border: 0; width: 100%; height: 100%; background: var(--card); }
+    .toolbar { display: flex; gap: 8px; padding: 8px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02); }
+    .actions { margin-left: auto; display: flex; gap: 8px; }
+    .btn { appearance: none; border: 1px solid var(--border); color: var(--text); background: rgba(255,255,255,0.06); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+    .btn:hover { border-color: var(--accent-2); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Health Check dashboards</h1>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-target="net">📡 Network Health</div>
+    <div class="tab" data-target="storage">💾 Storage & Backup</div>
+  </div>
+
+  <main class="content">
+    <section class="panel active" id="net">
+      <div class="toolbar">
+        <strong>Network Health Dashboard</strong>
+        <div class="actions">
+          <button class="btn" id="openNet">Open in new tab</button>
+        </div>
+      </div>
+      <iframe id="netFrame" src="Network-Health-Dashboard.html" title="Network Health Dashboard" referrerpolicy="no-referrer"></iframe>
+    </section>
+    <section class="panel" id="storage">
+      <div class="toolbar">
+        <strong>Storage & Backup Health Check Portal</strong>
+        <div class="actions">
+          <button class="btn" id="openStorage">Open in new tab</button>
+        </div>
+      </div>
+      <iframe id="storageFrame" src="Backup and Storage Health Check portal.html" title="Storage & Backup Health Check Portal" referrerpolicy="no-referrer"></iframe>
+    </section>
+  </main>
+
+  <script>
+    // Tab navigation
+    document.querySelectorAll('.tab').forEach(el => {
+      el.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(n => n.classList.remove('active'));
+        el.classList.add('active');
+        const target = el.getAttribute('data-target');
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.getElementById(target).classList.add('active');
+      });
+    });
+
+    // Open in new tab buttons
+    document.getElementById('openNet').addEventListener('click', () => window.open('Network-Health-Dashboard.html', '_blank'));
+    document.getElementById('openStorage').addEventListener('click', () => window.open('Backup and Storage Health Check portal.html', '_blank'));
+  </script>
+</body>
+</html>
